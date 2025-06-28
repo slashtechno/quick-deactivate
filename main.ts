@@ -49,9 +49,7 @@ app.event("reaction_added", async ({ body, client }) => {
 
     try {
       const formData = new FormData();
-      formData.append("token", adminToken);
       formData.append("user", userId);
-      formData.append("target_team", "T0266FRGM");
       const headers = new Headers();
 
       // Add the cookie to the headers
