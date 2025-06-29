@@ -73,6 +73,11 @@ async function parseAndDeactivate(options: parseAndDeactivateOptions) {
       );
       if (!respJson.ok) {
         console.error(`Failed to deactivate user ${userId}:`, respJson);
+        if (respJson.error === "user_not_found") {
+          console.debug(
+            `User ${userId} not found, original message: ${options.messageContent}`,
+          );
+        }
         // try {
         //   options.client.reactions.remove(
         //     {
@@ -86,7 +91,19 @@ async function parseAndDeactivate(options: parseAndDeactivateOptions) {
         // }
         return;
       }
-      // React with :white_check_mark:
+
+      // React with :white_check_mark if not already reacted
+      const reactions = await options.client.reactions.get({
+        channel: options.channelId,
+        timestamp: options.messageTs,
+      });
+      if (
+        reactions.message?.reactions &&
+        reactions.message.reactions.some((r) => r.name === "white_check_mark")
+      ) {
+        console.debug("Reaction already exists, skipping reaction addition.");
+        return;
+      }
       options.client.reactions.add(
         {
           channel: options.channelId,
@@ -106,49 +123,60 @@ async function parseAndDeactivate(options: parseAndDeactivateOptions) {
 
 async function deactivateAllUnmarkedUsers(
   client: WebClientType,
+  userClient: WebClientType,
   channelId: string,
   adminToken: string,
   adminCookie: string,
 ) {
-  const sinceDate = new Date("2025-06-23T00:00:00Z");
-  const oldest = (sinceDate.getTime() / 1000).toString();
-  let hasMore = true;
-  let cursor: string | undefined = undefined;
+  const query =
+    `in:#verifications-deactivations after:2025-06-23 -is:thread -unknown`;
+    // `in:#verifications-deactivations after:2025-06-23 -is:thread`;
   // const messagesWithoutCheck: { text?: string; subtype?: string; reactions?: { name: string }[]; ts?: string }[] = [];
+  let continueSearching = true;
+  let page = 1;
 
-  while (hasMore) {
-    const result = await client.conversations.history({
-      channel: channelId,
-      oldest,
-      limit: 200,
-      cursor,
-      inclusive: true,
+  while (continueSearching) {
+    const result = await userClient.search.messages({
+      query: query,
+      page: page,
     });
     if (result.messages) {
-      console.debug(`Found ${result.messages.length} messages`);
-      for (const msg of result.messages) {
-        if (!msg.text || (msg.subtype != "bot_message")) continue;
-        const hasCheck = (msg.reactions || []).some((r) =>
-          r.name === "white_check_mark"
-        );
-        // if (!hasCheck) {
-        // console.debug(`Message without checkmark: ${msg.text}`);
-        if (true) {
-          await parseAndDeactivate(
-            {
-              messageContent: msg.text || "",
-              channelId: channelId,
-              messageTs: msg.ts || "",
-              client: client,
-              userId: "",
-              adminToken: adminToken,
-              adminCookie: adminCookie,
-            },
-          );
+      const messages = result.messages.matches ?? [];
+      console.debug(`Found ${messages.length} messages`);
+      for (const msg of messages) {
+        if (msg.text && msg.ts) {
+          const reactions = client.reactions.get({
+            channel: channelId,
+            timestamp: msg.ts || "",
+          });
+          const hasCheck = ((await reactions).message?.reactions || []).some((
+            r,
+          ) => r.name === "white_check_mark");
+          if (!hasCheck) {
+            console.debug(`Message without checkmark: ${msg.text}`);
+            // if (true) {
+            await parseAndDeactivate(
+              {
+                messageContent: msg.text || "",
+                channelId: channelId,
+                messageTs: msg.ts || "",
+                client: client,
+                userId: "",
+                adminToken: adminToken,
+                adminCookie: adminCookie,
+              },
+            );
+          }
         }
+        const currentPage = result.messages.pagination?.page || 1;
+        const totalPages = result.messages.pagination?.last || 1;
+        if (currentPage >= totalPages) {
+          continueSearching = false;
+          console.debug("No more pages to search.");
+        }
+        console.debug(`Last page: ${currentPage}, Total pages: ${totalPages}`);
+        page++;
       }
-      hasMore = !!result.has_more;
-      cursor = result.response_metadata?.next_cursor;
     }
     // console.debug(`Found ${messagesWithoutCheck.length} messages without checkmark`);
     // return messagesWithoutCheck;
@@ -220,6 +248,7 @@ app.message(
 (async () => {
   await deactivateAllUnmarkedUsers(
     new WebClient(Deno.env.get("SLACK_BOT_TOKEN") || ""),
+    new WebClient(Deno.env.get("SLACK_USER_TOKEN") || ""),
     LOG_CHANNEL,
     adminToken,
     adminCookie,
