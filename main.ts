@@ -1,4 +1,5 @@
 import pkg from "npm:@slack/bolt";
+import { WebClient, WebClient as WebClientType } from "npm:@slack/web-api";
 const { App } = pkg;
 
 // Initializes your app with your bot token and app token
@@ -10,6 +11,151 @@ const app = new App({
 const adminToken = Deno.env.get("SLACK_ADMIN_TOKEN") || "";
 const adminCookie = `d=${Deno.env.get("SLACK_ADMIN_COOKIE")}`;
 
+const LOG_CHANNEL = "C07U4A62KL3"; // Channel ID for the log channel
+
+interface deactivateOptions {
+  userId: string;
+  adminToken: string;
+  adminCookie: string;
+}
+
+interface DeactivateResponse {
+  ok: boolean;
+  [key: string]: unknown;
+}
+
+async function deactivate(
+  options: deactivateOptions,
+): Promise<DeactivateResponse> {
+  const formData = new FormData();
+  formData.append("user", options.userId);
+  // formData.append("token", options.adminToken);
+  // formData.append("target_team", "T0266FRGM");
+  const headers = new Headers();
+
+  // Add the cookie to the headers
+  headers.append("Cookie", adminCookie);
+  headers.append(
+    "Authorization",
+    `Bearer ${adminToken}`,
+  );
+  const resp = await fetch(
+    "https://slack.com/api/users.admin.setInactive",
+    {
+      method: "POST",
+      body: formData,
+      headers,
+    },
+  );
+  const respJson = await resp.json();
+  return respJson;
+}
+
+interface parseAndDeactivateOptions extends deactivateOptions {
+  messageContent: string;
+  channelId: string;
+  messageTs: string;
+  client: WebClientType;
+}
+async function parseAndDeactivate(options: parseAndDeactivateOptions) {
+  const matches = options.messageContent.match(/U[A-Z0-9]+/g);
+  if (matches && matches.length >= 1) {
+    const userId = matches[0];
+    console.info(`Deactivating ${userId}`);
+
+    try {
+      const respJson = await deactivate(
+        {
+          userId,
+          adminCookie: options.adminCookie,
+          adminToken: options.adminToken,
+        },
+      );
+      if (!respJson.ok) {
+        console.error(`Failed to deactivate user ${userId}:`, respJson);
+        // try {
+        //   options.client.reactions.remove(
+        //     {
+        //       channel: options.channelId,
+        //       timestamp: options.messageTs,
+        //       name: "white_check_mark",
+        //     },
+        //   );
+        // } catch (_err) {
+        //   // no reaction present, most likely
+        // }
+        return;
+      }
+      // React with :white_check_mark:
+      options.client.reactions.add(
+        {
+          channel: options.channelId,
+          timestamp: options.messageTs,
+          name: "white_check_mark",
+        },
+      );
+    } catch (err) {
+      console.error(err);
+      return;
+    }
+  } else {
+    console.error("Unable to get 1 user ID");
+    return;
+  }
+}
+
+async function deactivateAllUnmarkedUsers(
+  client: WebClientType,
+  channelId: string,
+  adminToken: string,
+  adminCookie: string,
+) {
+  const sinceDate = new Date("2025-06-23T00:00:00Z");
+  const oldest = (sinceDate.getTime() / 1000).toString();
+  let hasMore = true;
+  let cursor: string | undefined = undefined;
+  // const messagesWithoutCheck: { text?: string; subtype?: string; reactions?: { name: string }[]; ts?: string }[] = [];
+
+  while (hasMore) {
+    const result = await client.conversations.history({
+      channel: channelId,
+      oldest,
+      limit: 200,
+      cursor,
+      inclusive: true,
+    });
+    if (result.messages) {
+      console.debug(`Found ${result.messages.length} messages`);
+      for (const msg of result.messages) {
+        if (!msg.text || (msg.subtype != "bot_message")) continue;
+        const hasCheck = (msg.reactions || []).some((r) =>
+          r.name === "white_check_mark"
+        );
+        // if (!hasCheck) {
+        // console.debug(`Message without checkmark: ${msg.text}`);
+        if (true) {
+          await parseAndDeactivate(
+            {
+              messageContent: msg.text || "",
+              channelId: channelId,
+              messageTs: msg.ts || "",
+              client: client,
+              userId: "",
+              adminToken: adminToken,
+              adminCookie: adminCookie,
+            },
+          );
+        }
+      }
+      hasMore = !!result.has_more;
+      cursor = result.response_metadata?.next_cursor;
+    }
+    // console.debug(`Found ${messagesWithoutCheck.length} messages without checkmark`);
+    // return messagesWithoutCheck;
+    await new Promise((resolve) => setTimeout(resolve, 1000)); // Sleep for 1 second to avoid rate limiting
+  }
+}
+
 // Okay, I trust if you're reading this, you're not going to go and delete this regex pattern link that I'm probably never going to reference again and that I don't feel like storing the delete URL to.
 // https://regex101.com/r/mY8acm/4
 // https://regex101.com/DON'Tdelete/EaVW5aHHujMKRecKvbLLJ2ncV6GW27HxvVcZ
@@ -18,7 +164,10 @@ app.message(
   async ({ body, client }) => {
     console.debug(body);
     const channelId = body.event.channel;
-
+    if (channelId != LOG_CHANNEL) {
+      console.debug("Ignoring message not in log channel");
+      return;
+    }
     const result = await client.conversations.history({
       channel: channelId,
       latest: body.event.ts,
@@ -34,74 +183,47 @@ app.message(
     }
     console.debug(message);
 
-    const matches = message.text?.match(/U[A-Z0-9]+/g);
-    if (matches && matches.length >= 1) {
-      const userId = matches[0];
-      console.info(`Deactivating ${userId}`);
-
-      try {
-        const formData = new FormData();
-        formData.append("user", userId);
-        const headers = new Headers();
-
-        // Add the cookie to the headers
-        headers.append("Cookie", adminCookie);
-        headers.append(
-          "Authorization",
-          `Bearer ${adminToken}`,
-        );
-        const resp = await fetch(
-          "https://slack.com/api/users.admin.setInactive",
-          {
-            method: "POST",
-            body: formData,
-            headers,
-          },
-        );
-        console.debug(
-          await resp.json(),
-        );
-
-        // React with :white_check_mark:
-        client.reactions.add(
-          {
-            channel: channelId,
-            timestamp: body.event.ts,
-            name: "white_check_mark",
-          },
-        );
-      } catch (err) {
-        console.error(err);
-        return;
-      }
-    } else {
-      console.error("Unable to get 1 user ID");
-      return;
-    }
+    parseAndDeactivate(
+      {
+        messageContent: message.text ?? "",
+        channelId: channelId,
+        messageTs: message.ts ?? "",
+        client: client,
+        userId: "",
+        adminToken: adminToken,
+        adminCookie: adminCookie,
+      },
+    );
   },
 );
 
 // Inspect message... but better :)
-app.event("reaction_added", async ({ body, client }) => {
-  console.debug(body);
-    const channelId = body.event.item.channel;
-    const result = await client.conversations.history({
-    channel: channelId,
-    latest: body.event.item.ts,
-    inclusive: true,
-    limit: 1,
-  });
-  const message = result.messages && result.messages.length > 0
-    ? result.messages[0]
-    : undefined;
-  if (message == undefined) {
-    console.error("couldn't get message");
-    return;
-  }
-  console.debug(message);
-});
+// app.event("reaction_added", async ({ body, client }) => {
+//   console.debu`  g(body);
+//     const channelId = body.event.item.channel;
+//     const result = await client.conversations.history({
+//     channel: channelId,
+//     latest: body.event.item.ts,
+//     inclusive: true,
+//     limit: 1,
+//   });
+//   const message = result.messages && result.messages.length > 0
+//     ? result.messages[0]
+//     : undefined;
+//   if (message == undefined) {
+//     console.error("couldn't get message");
+//     return;
+//   }
+//   console.debug(message);
+// });
 
 (async () => {
+  await deactivateAllUnmarkedUsers(
+    new WebClient(Deno.env.get("SLACK_BOT_TOKEN") || ""),
+    LOG_CHANNEL,
+    adminToken,
+    adminCookie,
+  );
   // Start your app
   await app.start(Deno.env.get("PORT") || 3000);
 

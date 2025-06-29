@@ -17,6 +17,7 @@
         "--inspect-wait",
         "--allow-all",
         "--env-file"
+        // "--watch"
       ],
       "attachSimplePort": 9229
     }
