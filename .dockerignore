@@ -1,0 +1,15 @@
+# Ignore node_modules and deno cache
+node_modules/
+.deno/
+
+# Ignore environment files
+.env
+
+# Ignore logs and temp files
+*.log
+*.tmp
+
+# Ignore Docker-related files
+docker-compose.override.yml
+Dockerfile*
+.dockerignore

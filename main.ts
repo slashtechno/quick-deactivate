@@ -1,4 +1,3 @@
-import { matchesGlob } from "node:path";
 import pkg from "npm:@slack/bolt";
 import { WebClient, WebClient as WebClientType } from "npm:@slack/web-api";
 const { App } = pkg;
@@ -268,34 +267,25 @@ app.message(
   },
 );
 
-// Inspect message... but better :)
-// app.event("reaction_added", async ({ body, client }) => {
-//   console.debu`  g(body);
-//     const channelId = body.event.item.channel;
-//     const result = await client.conversations.history({
-//     channel: channelId,
-//     latest: body.event.item.ts,
-//     inclusive: true,
-//     limit: 1,
-//   });
-//   const message = result.messages && result.messages.length > 0
-//     ? result.messages[0]
-//     : undefined;
-//   if (message == undefined) {
-//     console.error("couldn't get message");
-//     return;
-//   }
-//   console.debug(message);
-// });
+app.command(
+  "/clear-deactivation-backlog",
+async ({ ack, respond, client }) => {
+  await ack();
+  await deactivateAllUnmarkedUsers(
+    new WebClient(Deno.env.get("SLACK_BOT_TOKEN") || ""),
+    new WebClient(Deno.env.get("SLACK_USER_TOKEN") || ""),
+    LOG_CHANNEL,
+    adminToken,
+    adminCookie,
+  );
+  respond({
+    text: "Cleared deactivation backlog (hopefully)! Check the logs for details.",
+  });
+  
+});
+
 
 (async () => {
-  // await deactivateAllUnmarkedUsers(
-  //   new WebClient(Deno.env.get("SLACK_BOT_TOKEN") || ""),
-  //   new WebClient(Deno.env.get("SLACK_USER_TOKEN") || ""),
-  //   LOG_CHANNEL,
-  //   adminToken,
-  //   adminCookie,
-  // );
   // Start your app
   await app.start(Deno.env.get("PORT") || 3000);
 
