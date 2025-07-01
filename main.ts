@@ -10,8 +10,9 @@ const app = new App({
 });
 const adminToken = Deno.env.get("SLACK_ADMIN_TOKEN") || "";
 const adminCookie = `d=${Deno.env.get("SLACK_ADMIN_COOKIE")}`;
-
-const LOG_CHANNEL = "C07U4A62KL3"; // Channel ID for the log channel
+const LOG_CHANNEL = "C07U4A62KL3";
+const DEACTIVATED_USERS_LOG_WEBHOOK_URL =
+  Deno.env.get("DEACTIVATED_USERS_LOG_WEBHOOK_URL") || "";
 
 interface deactivateOptions {
   userId: string;
@@ -22,6 +23,24 @@ interface deactivateOptions {
 interface DeactivateResponse {
   ok: boolean;
   [key: string]: unknown;
+}
+
+async function sendMessageToSlackWebhook(
+  message: string,
+  webhookUrl: string = DEACTIVATED_USERS_LOG_WEBHOOK_URL,
+) {
+  const resp = await fetch(webhookUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      text: message,
+    }),
+  });
+  if (!resp.ok) {
+    console.error("Failed to send message to Slack webhook:", resp.statusText);
+  }
 }
 
 async function deactivate(
@@ -67,7 +86,10 @@ async function parseAndDeactivate(options: parseAndDeactivateOptions) {
       const emailRegex = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/;
       const emailMatch = options.messageContent.match(emailRegex);
       if (!emailMatch) {
-        console.error("No email found in message content", options.messageContent);
+        console.error(
+          "No email found in message content",
+          options.messageContent,
+        );
         return;
       }
       const email = emailMatch[1];
@@ -89,7 +111,6 @@ async function parseAndDeactivate(options: parseAndDeactivateOptions) {
       return;
     }
   }
-
 
   console.info(`Deactivating ${userId}`);
   try {
@@ -155,7 +176,7 @@ async function deactivateAllUnmarkedUsers(
 ) {
   const query =
     // `in:#verifications-deactivations after:2025-06-23 -is:thread -unknown`;
-  `in:#verifications-deactivations after:2025-06-01 -is:thread`;
+    `in:#verifications-deactivations after:2025-06-01 -is:thread`;
   // const messagesWithoutCheck: { text?: string; subtype?: string; reactions?: { name: string }[]; ts?: string }[] = [];
   let continueSearching = true;
   let page = 1;
@@ -172,8 +193,8 @@ async function deactivateAllUnmarkedUsers(
         if (msg.text == "") {
           let combinedText = "";
           for (const block of msg.blocks || []) {
-            if (block.text){
-              combinedText += (block.text.text + "\n");``
+            if (block.text) {
+              combinedText += block.text.text + "\n";
             }
           }
           msg.text = combinedText.trim();
@@ -202,10 +223,10 @@ async function deactivateAllUnmarkedUsers(
             );
           } else {
             // console.debug(
-              // `Message with checkmark, skipping: ${msg.text}`,
+            // `Message with checkmark, skipping: ${msg.text}`,
             // );
           }
-        } else{
+        } else {
           console.debug(
             `Skipping message without timestamp or not from identi-tea: ${msg.text}`,
           );
@@ -269,21 +290,89 @@ app.message(
 
 app.command(
   "/clear-deactivation-backlog",
-async ({ ack, respond, client }) => {
-  await ack();
-  await deactivateAllUnmarkedUsers(
-    new WebClient(Deno.env.get("SLACK_BOT_TOKEN") || ""),
-    new WebClient(Deno.env.get("SLACK_USER_TOKEN") || ""),
-    LOG_CHANNEL,
-    adminToken,
-    adminCookie,
-  );
-  respond({
-    text: "Cleared deactivation backlog (hopefully)! Check the logs for details.",
-  });
-  
-});
+  async ({ ack, respond, client }) => {
+    await ack();
+    await deactivateAllUnmarkedUsers(
+      new WebClient(Deno.env.get("SLACK_BOT_TOKEN") || ""),
+      new WebClient(Deno.env.get("SLACK_USER_TOKEN") || ""),
+      LOG_CHANNEL,
+      adminToken,
+      adminCookie,
+    );
+    respond({
+      text:
+        "Cleared deactivation backlog (hopefully)! Check the logs for details.",
+    });
+  },
+);
 
+app.command(
+  "/deactivate",
+  async ({ ack, respond, command, client }) => {
+    await ack();
+    console.debug("Received command:", command);
+
+    // Check if the user is a workspace admin
+    const profile = await client.users.info(
+      {
+        user: command.user_id,
+      },
+    );
+    if (profile.user?.is_admin == true) {
+      // Example command.text: <@U075RTSLDQ8|user>
+
+      const matches = command.text.match(/<@([A-Z0-9]+)/);
+      console.log(matches);
+      if (!matches || matches.length < 2) {
+        respond(
+          "Invalid user ID format. Please use the command like `/deactivate @username`.",
+        );
+        return;
+      }
+
+      const respJson = await deactivate(
+        {
+          userId: matches[1],
+          adminCookie: adminCookie,
+          adminToken: adminToken,
+        },
+      );
+      if (!respJson.ok) {
+        console.error(`Failed to deactivate user ${matches[1]}:`, respJson);
+        if (respJson.error === "user_not_found") {
+          respond(
+            `User ${matches[1]} not found. Please check the user ID.`,
+          );
+        } else {
+          respond(
+            `Failed to deactivate user ${matches[1]}: ${respJson.error}`,
+          );
+        }
+        return;
+      } else {
+        respond(
+          `User <@${
+            matches[1]
+          }> has been successfully deactivated by <@${command.user_id}>.`,
+        );
+        // Log the deactivation to the webhook
+        await sendMessageToSlackWebhook(
+          `User <@${
+            matches[1]
+          }> has been deactivated by <@${command.user_id}>.`,
+        );
+      }
+    } else {
+      respond(
+        "You are not an admin, so you cannot use this command.",
+      );
+      await sendMessageToSlackWebhook(
+        `User <@${command.user_id}> attempted to use the /deactivate command but is not an admin.`,
+      );
+      return;
+    }
+  },
+);
 
 (async () => {
   // Start your app
