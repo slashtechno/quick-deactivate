@@ -77,6 +77,9 @@ interface parseAndDeactivateOptions extends deactivateOptions {
   client: WebClientType;
 }
 async function parseAndDeactivate(options: parseAndDeactivateOptions) {
+  if (!options.messageContent.includes("they're just >18 years old")) {
+    return;
+  }
   const matches = options.messageContent.match(/U[A-Z0-9]+/g);
   let userId = "";
   if (matches && matches.length >= 1) {
@@ -284,13 +287,13 @@ app.message(
         adminToken: adminToken,
         adminCookie: adminCookie,
       },
-    );
+    );``
   },
 );
 
 app.command(
   "/clear-deactivation-backlog",
-  async ({ ack, respond, client }) => {
+  async ({ ack, respond }) => {
     await ack();
     await deactivateAllUnmarkedUsers(
       new WebClient(Deno.env.get("SLACK_BOT_TOKEN") || ""),
