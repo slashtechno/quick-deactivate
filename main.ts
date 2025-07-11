@@ -78,6 +78,7 @@ interface parseAndDeactivateOptions extends deactivateOptions {
 }
 async function parseAndDeactivate(options: parseAndDeactivateOptions) {
   if (!options.messageContent.includes("they're just >18 years old")) {
+    console.log(`Skipping message not containing "they're just >18 years old": ${options.messageContent}`);
     return;
   }
   const matches = options.messageContent.match(/U[A-Z0-9]+/g);
