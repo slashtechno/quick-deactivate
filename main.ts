@@ -46,6 +46,16 @@ async function sendMessageToSlackWebhook(
 async function deactivate(
   options: deactivateOptions,
 ): Promise<DeactivateResponse> {
+  // Prevent deactivation of protected user
+  if (options.userId === "U075RTSLDQ8") {
+    console.info(`Blocking deactivation of protected user ${options.userId}`);
+    return {
+      ok: false,
+      error: "protected_user",
+      message: "This user is protected from deactivation"
+    };
+  }
+
   const formData = new FormData();
   formData.append("user", options.userId);
   // formData.append("token", options.adminToken);
@@ -347,6 +357,13 @@ app.command(
           respond(
             `User ${matches[1]} not found. Please check the user ID.`,
           );
+        } else if (respJson.error === "protected_user") {
+          respond(
+            `Cannot deactivate protected user <@${matches[1]}>. This user is protected from deactivation.`,
+          );
+          await sendMessageToSlackWebhook(
+            `User <@${command.user_id}> attempted to deactivate protected user <@${matches[1]}>.`,
+          );
         } else {
           respond(
             `Failed to deactivate user ${matches[1]}: ${respJson.error}`,
@@ -382,5 +399,5 @@ app.command(
   // Start your app
   await app.start(Deno.env.get("PORT") || 3000);
 
-  app.logger.info("⚡️ Bolt app is running!");
+  app.logger.info("⚡️ Bolt app is running, or at least we can hope it is");
 })();
