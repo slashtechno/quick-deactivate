@@ -10,3 +10,23 @@ manually can get difficult as we need to deactivate more and more accounts. This
 tool aims to automate that by allowing us to simply react to a message sent by
 our existing verification infrastructure to quickly confirm the deactivation of
 a user.
+
+## Installation & Running
+
+### Using Docker Compose
+
+1. Copy `sample.env` to `.env` and fill in your environment variables.
+2. Build and start the service:
+   ```sh
+   docker compose up --build
+   ```
+   This will build the Docker image and run the app using `main.ts` with all permissions.
+
+### Using Deno Directly
+
+1. Install [Deno](https://deno.com/manual/getting_started/installation) if you haven't already.
+2. Copy `sample.env` to `.env` and fill in your environment variables.
+3. Run the app:
+   ```sh
+   deno run --allow-all --env-file main.ts 
+   ```
