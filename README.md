@@ -30,3 +30,11 @@ a user.
    ```sh
    deno run --allow-all --env-file main.ts 
    ```
+
+## Slack Commands
+
+### `/deactivate @username`
+Deactivates the specified user (e.g., `/deactivate @username`). Only workspace admins can use this command. If successful, the user will be deactivated and a log will be sent to the webhook.
+
+### `/clear-deactivation-backlog`
+Scans the #verifications-deactivations channel for unmarked messages and attempts to deactivate users who have not already been processed. Only workspace admins can use this command.
