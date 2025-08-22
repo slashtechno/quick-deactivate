@@ -295,11 +295,10 @@ async function deactivate(
       await ack();
       console.debug("Received command:", command);
 
+      const matches = command.text.match(/<@([A-Z0-9]+)/);
       if (await isUserAdmin(client, command.user_id)) {
         // Example command.text: <@U075RTSLDQ8|user>
   
-        const matches = command.text.match(/<@([A-Z0-9]+)/);
-        console.log(matches);
         if (!matches || matches.length < 2) {
           respond(
             "Invalid user ID format. Please use the command like `/deactivate @username`.",
@@ -351,7 +350,7 @@ async function deactivate(
           "You are not an admin, so you cannot use this command.",
         );
         await sendMessageToSlackWebhook(
-          `User <@${command.user_id}> attempted to use the /deactivate to deactivate user <@${matches[1]}> but is not an admin.`,
+          `User <@${command.user_id}> attempted to use the /deactivate to deactivate user <@${matches?.[1] ?? "<unknown>"}> but is not an admin.`,
         );
         return;
       }
