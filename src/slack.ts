@@ -88,9 +88,9 @@ app.command("/get-email", async ({ ack, command, client, respond }) => {
         text: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
       });
     }
-  } else {
-    respond({
-      text: "Please provide a user ID. Usage: `/get-email U1234567890`",
-    });
-  }
+      } else {
+      respond({
+        text: "Please provide a user. Usage: `/get-email @username`",
+      });
+    }
 });
