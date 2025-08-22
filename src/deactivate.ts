@@ -1,6 +1,6 @@
 import { WebClient, WebClient as WebClientType } from "npm:@slack/web-api";
 import { ADMIN_TOKEN, ADMIN_COOKIE, LOG_CHANNEL, PROTECTED_USER_IDS } from "./consts.ts";
-import { app, isUserAdmin, sendMessageToSlackWebhook } from "./slack.ts";
+import { app, isUserAdmin, sendMessageToSlackWebhook, extractFirstUserId } from "./slack.ts";
 interface deactivateOptions {
     userId: string;
     adminToken: string;
@@ -60,11 +60,8 @@ async function deactivate(
       console.log(`Skipping message not containing "they're just >18 years old": ${options.messageContent}`);
       return;
     }
-    const matches = options.messageContent.match(/U[A-Z0-9]+/g);
-    let userId = "";
-    if (matches && matches.length >= 1) {
-      userId = matches[0]; // Matches entire matched string, matches[1] matches the first group
-    } else {
+    let userId = extractFirstUserId(options.messageContent);
+    if (!userId) {
       try {
         const emailRegex = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/;
         const emailMatch = options.messageContent.match(emailRegex);
@@ -295,11 +292,11 @@ async function deactivate(
       await ack();
       console.debug("Received command:", command);
 
-      const matches = command.text.match(/<@([A-Z0-9]+)/);
+      const targetUserId = extractFirstUserId(command.text);
       if (await isUserAdmin(client, command.user_id)) {
         // Example command.text: <@U075RTSLDQ8|user>
   
-        if (!matches || matches.length < 2) {
+        if (!targetUserId) {
           respond(
             "Invalid user ID format. Please use the command like `/deactivate @username`.",
           );
@@ -308,40 +305,40 @@ async function deactivate(
   
         const respJson = await deactivate(
           {
-            userId: matches[1],
+            userId: targetUserId,
             adminCookie: ADMIN_COOKIE,
             adminToken: ADMIN_TOKEN,
           },
         );
         if (!respJson.ok) {
-          console.error(`Failed to deactivate user ${matches[1]}:`, respJson);
+          console.error(`Failed to deactivate user ${targetUserId}:`, respJson);
           if (respJson.error === "user_not_found") {
             respond(
-              `User ${matches[1]} not found. Please check the user ID.`,
+              `User ${targetUserId} not found. Please check the user ID.`,
             );
           } else if (respJson.error === "protected_user") {
             respond(
-              `Cannot deactivate protected user <@${matches[1]}>. This user is protected from deactivation.`,
+              `Cannot deactivate protected user <@${targetUserId}>. This user is protected from deactivation.`,
             );
             await sendMessageToSlackWebhook(
-              `User <@${command.user_id}> attempted to deactivate protected user <@${matches[1]}>.`,
+              `User <@${command.user_id}> attempted to deactivate protected user <@${targetUserId}>.`,
             );
           } else {
             respond(
-              `Failed to deactivate user ${matches[1]}: ${respJson.error}`,
+              `Failed to deactivate user ${targetUserId}: ${respJson.error}`,
             );
           }
           return;
         } else {
           respond(
             `User <@${
-              matches[1]
+              targetUserId
             }> has been successfully deactivated by <@${command.user_id}>.`,
           );
           // Log the deactivation to the webhook
           await sendMessageToSlackWebhook(
             `User <@${
-              matches[1]
+              targetUserId
             }> has been deactivated by <@${command.user_id}>.`,
           );
         }
@@ -350,7 +347,7 @@ async function deactivate(
           "You are not an admin, so you cannot use this command.",
         );
         await sendMessageToSlackWebhook(
-          `User <@${command.user_id}> attempted to use the /deactivate to deactivate user <@${matches?.[1] ?? "<unknown>"}> but is not an admin.`,
+          `User <@${command.user_id}> attempted to use the /deactivate to deactivate user <@${targetUserId ?? "<unknown>"}> but is not an admin.`,
         );
         return;
       }
