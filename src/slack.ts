@@ -47,9 +47,6 @@ export function extractFirstUserId(text: string): string | null {
   return matches && matches.length > 0 ? matches[0] : null;
 }
 
-
-
-
 export const app = new App({
   token: Deno.env.get("SLACK_BOT_TOKEN"),
   socketMode: true,

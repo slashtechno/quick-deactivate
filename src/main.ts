@@ -1,5 +1,6 @@
 import { app } from "./slack.ts";
-// Initializes your app with your bot token and app token
+// Import deactivate.ts to ensure commands are registered
+import "./deactivate.ts";
 
 
 
