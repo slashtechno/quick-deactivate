@@ -24,12 +24,12 @@ async function deactivate(client: WebClientType, userId: string): Promise<Deacti
   });
 }
 
-async function reactivate(client: WebClientType, userId: string): Promise<DeactivateResponse> {
-  return await client.admin.users.setRegular({
-    team_id: TEAM_ID,
-    user_id: userId
-  });
-}
+// async function reactivate(client: WebClientType, userId: string): Promise<DeactivateResponse> {
+//   return await client.admin.users.setRegular({
+//     team_id: TEAM_ID,
+//     user_id: userId
+//   });
+// }
   
   interface ParseAndDeactivateOptions {
     messageContent: string;
@@ -315,56 +315,56 @@ async function reactivate(client: WebClientType, userId: string): Promise<Deacti
     },
   );
 
-  app.command(
-    "/reactivate",
-    async ({ ack, respond, command, client }) => {
-      await ack();
-      console.debug("Received command:", command);
+  // app.command(
+  //   "/reactivate",
+  //   async ({ ack, respond, command, client }) => {
+  //     await ack();
+  //     console.debug("Received command:", command);
 
-      const targetUserId = extractFirstUserId(command.text);
-      if (await isUserAdmin(client, command.user_id)) {
-        if (!targetUserId) {
-          respond(
-            "Invalid user ID format. Please use the command like `/reactivate @username`.",
-          );
-          return;
-        }
+  //     const targetUserId = extractFirstUserId(command.text);
+  //     if (await isUserAdmin(client, command.user_id)) {
+  //       if (!targetUserId) {
+  //         respond(
+  //           "Invalid user ID format. Please use the command like `/reactivate @username`.",
+  //         );
+  //         return;
+  //       }
 
-        const respJson = await reactivate(client, targetUserId);
-        if (!respJson.ok) {
-          console.error(`Failed to reactivate user ${targetUserId}:`, respJson);
-          if (respJson.error === "user_not_found") {
-            respond(
-              `User ${targetUserId} not found. Please check the user ID.`,
-            );
-          } else {
-            respond(
-              `Failed to reactivate user ${targetUserId}: ${respJson.error}`,
-            );
-          }
-          return;
-        } else {
-          respond(
-            `User <@${
-              targetUserId
-            }> has been successfully reactivated by <@${command.user_id}>.`,
-          );
-          // Log the reactivation to the webhook
-          await sendMessageToSlackWebhook(
-            `User <@${
-              targetUserId
-            }> has been reactivated by <@${command.user_id}>.`,
-          );
-        }
-      } else {
-        respond(
-          "You are not an admin, so you cannot use this command.",
-        );
-        await sendMessageToSlackWebhook(
-          `User <@${command.user_id}> attempted to use the /reactivate command for user <@${targetUserId ?? "<unknown>"}> but is not an admin.`,
-        );
-        return;
-      }
-    },
-  );
+  //       const respJson = await reactivate(client, targetUserId);
+  //       if (!respJson.ok) {
+  //         console.error(`Failed to reactivate user ${targetUserId}:`, respJson);
+  //         if (respJson.error === "user_not_found") {
+  //           respond(
+  //             `User ${targetUserId} not found. Please check the user ID.`,
+  //           );
+  //         } else {
+  //           respond(
+  //             `Failed to reactivate user ${targetUserId}: ${respJson.error}`,
+  //           );
+  //         }
+  //         return;
+  //       } else {
+  //         respond(
+  //           `User <@${
+  //             targetUserId
+  //           }> has been successfully reactivated by <@${command.user_id}>.`,
+  //         );
+  //         // Log the reactivation to the webhook
+  //         await sendMessageToSlackWebhook(
+  //           `User <@${
+  //             targetUserId
+  //           }> has been reactivated by <@${command.user_id}>.`,
+  //         );
+  //       }
+  //     } else {
+  //       respond(
+  //         "You are not an admin, so you cannot use this command.",
+  //       );
+  //       await sendMessageToSlackWebhook(
+  //         `User <@${command.user_id}> attempted to use the /reactivate command for user <@${targetUserId ?? "<unknown>"}> but is not an admin.`,
+  //       );
+  //       return;
+  //     }
+  //   },
+  // );
   
