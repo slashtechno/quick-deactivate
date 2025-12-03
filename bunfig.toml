@@ -1,0 +1,11 @@
+# Bun configuration file
+[test]
+preload = []
+
+[build]
+splitting = true
+entrypoints = ["src/main.ts"]
+outdir = "dist"
+
+[server]
+publicDir = "public"

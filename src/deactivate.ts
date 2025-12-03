@@ -1,61 +1,44 @@
-import { WebClient, WebClient as WebClientType } from "npm:@slack/web-api";
-import { ADMIN_TOKEN, ADMIN_COOKIE, LOG_CHANNEL, PROTECTED_USER_IDS } from "./consts.ts";
+import { WebClient, WebClient as WebClientType } from "@slack/web-api";
+import { ADMIN_TOKEN, TEAM_ID, LOG_CHANNEL, PROTECTED_USER_IDS } from "./consts.ts";
 import { app, isUserAdmin, sendMessageToSlackWebhook, extractFirstUserId } from "./slack.ts";
-interface deactivateOptions {
-    userId: string;
-    adminToken: string;
-    adminCookie: string;
-  }
-  
-  interface DeactivateResponse {
-    ok: boolean;
-    [key: string]: unknown;
+
+interface DeactivateResponse {
+  ok: boolean;
+  [key: string]: unknown;
+}
+
+async function deactivate(client: WebClientType, userId: string): Promise<DeactivateResponse> {
+  // Prevent deactivation of protected user
+  if (PROTECTED_USER_IDS.includes(userId)) {
+    console.info(`Blocking deactivation of protected user ${userId}`);
+    return {
+      ok: false,
+      error: "protected_user",
+      message: "This user is protected from deactivation"
+    };
   }
 
-async function deactivate(
-    options: deactivateOptions,
-  ): Promise<DeactivateResponse> {
-    // Prevent deactivation of protected user
-    if (PROTECTED_USER_IDS.includes(options.userId)) {
-      console.info(`Blocking deactivation of protected user ${options.userId}`);
-      return {
-        ok: false,
-        error: "protected_user",
-        message: "This user is protected from deactivation"
-      };
-    }
+  return await client.admin.users.remove({
+    team_id: TEAM_ID,
+    user_id: userId
+  });
+}
+
+async function reactivate(client: WebClientType, userId: string): Promise<DeactivateResponse> {
+  return await client.admin.users.setRegular({
+    team_id: TEAM_ID,
+    user_id: userId
+  });
+}
   
-    const formData = new FormData();
-    formData.append("user", options.userId);
-    // formData.append("token", options.adminToken);
-    // formData.append("target_team", "T0266FRGM");
-    const headers = new Headers();
-  
-    // Add the cookie to the headers
-    headers.append("Cookie", ADMIN_COOKIE);
-    headers.append(
-      "Authorization",
-      `Bearer ${ADMIN_TOKEN}`,
-    );
-    const resp = await fetch(
-      "https://slack.com/api/users.admin.setInactive",
-      {
-        method: "POST",
-        body: formData,
-        headers,
-      },
-    );
-    const respJson = await resp.json();
-    return respJson;
-  }
-  
-  interface parseAndDeactivateOptions extends deactivateOptions {
+  interface ParseAndDeactivateOptions {
     messageContent: string;
     channelId: string;
     messageTs: string;
     client: WebClientType;
   }
-  async function parseAndDeactivate(options: parseAndDeactivateOptions) {
+  
+  async function parseAndDeactivate(options: ParseAndDeactivateOptions) {
     if (!options.messageContent.includes("they're just >18 years old")) {
       console.log(`Skipping message not containing "they're just >18 years old": ${options.messageContent}`);
       return;
@@ -94,13 +77,7 @@ async function deactivate(
   
     console.info(`Deactivating ${userId}`);
     try {
-      const respJson = await deactivate(
-        {
-          userId,
-          adminCookie: ADMIN_COOKIE,
-          adminToken: ADMIN_TOKEN,
-        },
-      );
+      const respJson = await deactivate(options.client, userId);
       if (!respJson.ok) {
         console.error(`Failed to deactivate user ${userId}:`, respJson);
         if (respJson.error === "user_not_found") {
@@ -151,8 +128,6 @@ async function deactivate(
     client: WebClientType,
     userClient: WebClientType,
     channelId: string,
-    adminToken: string,
-    adminCookie: string,
   ) {
     const query =
       // `in:#verifications-deactivations after:2025-06-23 -is:thread -unknown`;
@@ -191,16 +166,13 @@ async function deactivate(
               // console.debug(`Message without checkmark: ${msg.text}`);
               // if (true) {
               await parseAndDeactivate(
-                {
-                  messageContent: msg.text || "",
-                  channelId: channelId,
-                  messageTs: msg.ts || "",
-                  client: client,
-                  userId: "",
-                  adminToken: adminToken,
-                  adminCookie: adminCookie,
-                },
-              );
+                 {
+                   messageContent: msg.text || "",
+                   channelId: channelId,
+                   messageTs: msg.ts || "",
+                   client: client,
+                 },
+               );
             } else {
               // console.debug(
               // `Message with checkmark, skipping: ${msg.text}`,
@@ -260,11 +232,8 @@ async function deactivate(
           channelId: channelId,
           messageTs: message.ts ?? "",
           client: client,
-          userId: "",
-          adminToken: ADMIN_TOKEN,
-          adminCookie: ADMIN_COOKIE,
         },
-      );``
+      );
     },
   );
   
@@ -273,11 +242,9 @@ async function deactivate(
     async ({ ack, respond }) => {
       await ack();
       await deactivateAllUnmarkedUsers(
-        new WebClient(Deno.env.get("SLACK_BOT_TOKEN") || ""),
-        new WebClient(Deno.env.get("SLACK_USER_TOKEN") || ""),
+        new WebClient(process.env.SLACK_BOT_TOKEN || ""),
+        new WebClient(process.env.SLACK_USER_TOKEN || ""),
         LOG_CHANNEL,
-        ADMIN_TOKEN,
-        ADMIN_COOKIE,
       );
       respond({
         text:
@@ -295,21 +262,15 @@ async function deactivate(
       const targetUserId = extractFirstUserId(command.text);
       if (await isUserAdmin(client, command.user_id)) {
         // Example command.text: <@U075RTSLDQ8|user>
-  
+
         if (!targetUserId) {
           respond(
             "Invalid user ID format. Please use the command like `/deactivate @username`.",
           );
           return;
         }
-  
-        const respJson = await deactivate(
-          {
-            userId: targetUserId,
-            adminCookie: ADMIN_COOKIE,
-            adminToken: ADMIN_TOKEN,
-          },
-        );
+
+        const respJson = await deactivate(client, targetUserId);
         if (!respJson.ok) {
           console.error(`Failed to deactivate user ${targetUserId}:`, respJson);
           if (respJson.error === "user_not_found") {
@@ -348,6 +309,59 @@ async function deactivate(
         );
         await sendMessageToSlackWebhook(
           `User <@${command.user_id}> attempted to use the /deactivate to deactivate user <@${targetUserId ?? "<unknown>"}> but is not an admin.`,
+        );
+        return;
+      }
+    },
+  );
+
+  app.command(
+    "/reactivate",
+    async ({ ack, respond, command, client }) => {
+      await ack();
+      console.debug("Received command:", command);
+
+      const targetUserId = extractFirstUserId(command.text);
+      if (await isUserAdmin(client, command.user_id)) {
+        if (!targetUserId) {
+          respond(
+            "Invalid user ID format. Please use the command like `/reactivate @username`.",
+          );
+          return;
+        }
+
+        const respJson = await reactivate(client, targetUserId);
+        if (!respJson.ok) {
+          console.error(`Failed to reactivate user ${targetUserId}:`, respJson);
+          if (respJson.error === "user_not_found") {
+            respond(
+              `User ${targetUserId} not found. Please check the user ID.`,
+            );
+          } else {
+            respond(
+              `Failed to reactivate user ${targetUserId}: ${respJson.error}`,
+            );
+          }
+          return;
+        } else {
+          respond(
+            `User <@${
+              targetUserId
+            }> has been successfully reactivated by <@${command.user_id}>.`,
+          );
+          // Log the reactivation to the webhook
+          await sendMessageToSlackWebhook(
+            `User <@${
+              targetUserId
+            }> has been reactivated by <@${command.user_id}>.`,
+          );
+        }
+      } else {
+        respond(
+          "You are not an admin, so you cannot use this command.",
+        );
+        await sendMessageToSlackWebhook(
+          `User <@${command.user_id}> attempted to use the /reactivate command for user <@${targetUserId ?? "<unknown>"}> but is not an admin.`,
         );
         return;
       }

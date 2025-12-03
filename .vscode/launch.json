@@ -10,16 +10,10 @@
       "type": "node",
       "program": "${workspaceFolder}/src/main.ts",
       "cwd": "${workspaceFolder}",
-      "env": {},
-      "runtimeExecutable": "deno",
-      "runtimeArgs": [
-        "run",
-        "--inspect-wait",
-        "--allow-all",
-        "--env-file"
-        // "--watch"
-      ],
-      "attachSimplePort": 9229
+      "runtimeExecutable": "bun",
+      "runtimeArgs": ["run", "src/main.ts"],
+      "attachSimplePort": 9229,
+      "envFile": "${workspaceFolder}/.env"
     }
   ]
 }

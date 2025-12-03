@@ -1,6 +1,6 @@
-# Ignore node_modules and deno cache
+# Ignore node_modules and bun cache
 node_modules/
-.deno/
+.bun/
 
 # Ignore environment files
 .env

@@ -1,11 +1,12 @@
 # Build stage
-FROM denoland/deno:latest AS builder
+FROM oven/bun:latest AS builder
 WORKDIR /app
-COPY . .
-RUN deno cache src/main.ts
+COPY package.json bun.lockb ./
+RUN bun install
 
 # Production stage
-FROM denoland/deno:latest
+FROM oven/bun:latest
 WORKDIR /app
-COPY --from=builder /app .
-CMD ["deno", "run", "--allow-all", "src/main.ts"]
+COPY --from=builder /app/node_modules ./node_modules
+COPY . .
+CMD ["bun", "src/main.ts"]

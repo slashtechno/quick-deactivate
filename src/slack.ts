@@ -1,7 +1,6 @@
 import { DEACTIVATED_USERS_LOG_WEBHOOK_URL } from "./consts.ts";
-import pkg from "npm:@slack/bolt";
-import { WebClient as WebClientType } from "npm:@slack/web-api";
-const { App } = pkg;
+import { App } from "@slack/bolt";
+import { WebClient as WebClientType } from "@slack/web-api";
 
 
 export async function sendMessageToSlackWebhook(
@@ -48,9 +47,9 @@ export function extractFirstUserId(text: string): string | null {
 }
 
 export const app = new App({
-  token: Deno.env.get("SLACK_BOT_TOKEN"),
+  token: process.env.SLACK_BOT_TOKEN,
   socketMode: true,
-  appToken: Deno.env.get("SLACK_APP_TOKEN"),
+  appToken: process.env.SLACK_APP_TOKEN,
 });
   
 app.command("/get-email", async ({ ack, command, client, respond }) => {

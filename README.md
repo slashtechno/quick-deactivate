@@ -20,21 +20,32 @@ a user.
    ```sh
    docker compose up --build
    ```
-   This will build the Docker image and run the app using `main.ts` with all permissions.
+   This will build the Docker image and run the app using Bun.
 
-### Using Deno Directly
+### Using Bun Directly
 
-1. Install [Deno](https://deno.com/manual/getting_started/installation) if you haven't already.
+1. Install [Bun](https://bun.sh) if you haven't already.
 2. Copy `sample.env` to `.env` and fill in your environment variables.
-3. Run the app:
+3. Install dependencies:
    ```sh
-   deno run --allow-all --env-file main.ts 
+   bun install
+   ```
+4. Run the app:
+   ```sh
+   bun src/main.ts
+   ```
+5. For development with auto-reload:
+   ```sh
+   bun run dev
    ```
 
 ## Slack Commands
 
 ### `/deactivate @username`
 Deactivates the specified user (e.g., `/deactivate @username`). Only workspace admins can use this command. If successful, the user will be deactivated and a log will be sent to the webhook.
+
+### `/reactivate @username`
+Reactivates the specified user (e.g., `/reactivate @username`). Only workspace admins can use this command. If successful, the user will be reactivated and a log will be sent to the webhook.
 
 ### `/clear-deactivation-backlog`
 Scans the #verifications-deactivations channel for unmarked messages and attempts to deactivate users who have not already been processed. Only workspace admins can use this command.

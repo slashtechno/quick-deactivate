@@ -19,6 +19,7 @@ oauth_config:
     user:
       - search:read
     bot:
+      - admin.users:write
       - channels:history
       - groups:history
       - reactions:read
