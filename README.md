@@ -1,3 +1,5 @@
+**NOTE: This has been migrated to an internal repo on [@hackclub](https://github.com/hackclub)**
+---
 # Quick deactivate
 
 This is a Slack bot built for [Hack Club](https://hackclub.com), a nonprofit
